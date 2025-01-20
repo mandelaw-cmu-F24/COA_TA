@@ -1,57 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "../components/ui/card";
-import { Plus, Clock } from "lucide-react";
+import { Plus, Clock, Pencil, Trash2 } from "lucide-react";
+import { transactionService } from "../services/api";
+import { toast } from "react-hot-toast";
 
 export default function TransactionsPage() {
-  const [transactions] = useState([
-    {
-      id: 1,
-      date: "2024-01-14",
-      description: "Monthly Salary",
-      amount: 2800.0,
-      type: "income",
-      account: "Bank Account",
-      category: "Salary",
-    },
-    {
-      id: 2,
-      date: "2024-01-14",
-      description: "Grocery Shopping",
-      amount: -125.0,
-      type: "expense",
-      account: "Bank Account",
-      category: "Food & Groceries",
-    },
-    {
-      id: 3,
-      date: "2024-01-14",
-      description: "Bus Ticket",
-      amount: -45.0,
-      type: "expense",
-      account: "Mobile Money",
-      category: "Transportation",
-    },
-    {
-      id: 4,
-      date: "2024-01-14",
-      description: "Coffee",
-      amount: -20.0,
-      type: "expense",
-      account: "Cash",
-      category: "Food & Dining",
-    },
-  ]);
-
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [showAddTransaction, setShowAddTransaction] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState("all");
   const [selectedType, setSelectedType] = useState("all");
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [categories, setCategories] = useState([]);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -63,6 +30,37 @@ export default function TransactionsPage() {
     date: new Date().toISOString().split("T")[0],
   });
 
+  // Fetch transactions
+  const fetchTransactions = async () => {
+    try {
+      setLoading(true);
+      const response = await transactionService.getAllTransactions({
+        account: selectedAccount,
+        type: selectedType,
+      });
+      setTransactions(response.data.data);
+    } catch (error) {
+      toast.error("Failed to fetch transactions");
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await categoryService.getAllCategories();
+      setCategories(response.data.data);
+    } catch (error) {
+      console.error("Failed to fetch categories:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchCategories();
+    fetchTransactions();
+  }, [selectedAccount, selectedType]);
+
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -71,10 +69,104 @@ export default function TransactionsPage() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Add transaction logic here
-    setShowAddTransaction(false);
+    try {
+      const response = await transactionService.createTransaction({
+        ...formData,
+        amount:
+          formData.type === "expense"
+            ? -Math.abs(parseFloat(formData.amount))
+            : Math.abs(parseFloat(formData.amount)),
+        categoryId: categories.find((c) => c.name === formData.category)?.id,
+      });
+
+      if (response.data.budgetAlert) {
+        if (response.data.budgetAlert.type === "exceeded") {
+          toast.error(response.data.budgetAlert.message);
+        } else {
+          toast.warning(response.data.budgetAlert.message);
+        }
+      }
+
+      toast.success("Transaction created successfully");
+      setShowAddTransaction(false);
+      setFormData({
+        type: "expense",
+        amount: "",
+        account: "Bank Account",
+        category: "Food & Groceries",
+        description: "",
+        date: new Date().toISOString().split("T")[0],
+      });
+      fetchTransactions();
+    } catch (error) {
+      toast.error("Failed to create transaction");
+      console.error(error);
+    }
+  };
+
+  const handleEdit = (transaction) => {
+    setEditingTransaction(transaction);
+    setFormData({
+      ...transaction,
+      amount: Math.abs(transaction.amount),
+    });
+    setShowAddTransaction(true);
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await transactionService.updateTransaction(
+        editingTransaction.id,
+        {
+          ...formData,
+          amount:
+            formData.type === "expense"
+              ? -Math.abs(parseFloat(formData.amount))
+              : Math.abs(parseFloat(formData.amount)),
+          categoryId: categories.find((c) => c.name === formData.category)?.id,
+        }
+      );
+
+      if (response.data.budgetAlert) {
+        if (response.data.budgetAlert.type === "exceeded") {
+          toast.error(response.data.budgetAlert.message);
+        } else {
+          toast.warning(response.data.budgetAlert.message);
+        }
+      }
+
+      toast.success("Transaction updated successfully");
+      setShowAddTransaction(false);
+      setEditingTransaction(null);
+      setFormData({
+        type: "expense",
+        amount: "",
+        account: "Bank Account",
+        category: "Food & Groceries",
+        description: "",
+        date: new Date().toISOString().split("T")[0],
+      });
+      fetchTransactions();
+    } catch (error) {
+      toast.error("Failed to update transaction");
+      console.error(error);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm("Are you sure you want to delete this transaction?")) {
+      try {
+        await transactionService.deleteTransaction(id);
+        toast.success("Transaction deleted successfully");
+        fetchTransactions();
+      } catch (error) {
+        toast.error("Failed to delete transaction");
+        console.error(error);
+      }
+    }
   };
 
   return (
@@ -84,43 +176,40 @@ export default function TransactionsPage() {
         <div className="flex justify-between items-center">
           <div className="flex space-x-4">
             <select
-              className="border rounded-lg px-4 py-2 text-gray-900 bg-white"
+              className="border rounded-lg px-4 py-2 text-black bg-white"
               value={selectedAccount}
               onChange={(e) => setSelectedAccount(e.target.value)}
             >
-              <option value="all" className="text-gray-900">
-                All Accounts
-              </option>
-              <option value="Bank Account" className="text-gray-900">
-                Bank Account
-              </option>
-              <option value="Mobile Money" className="text-gray-900">
-                Mobile Money
-              </option>
-              <option value="Cash" className="text-gray-900">
-                Cash
-              </option>
+              <option value="all">All Accounts</option>
+              <option value="Bank Account">Bank Account</option>
+              <option value="Mobile Money">Mobile Money</option>
+              <option value="Cash">Cash</option>
             </select>
 
             <select
-              className="border rounded-lg px-4 py-2 text-gray-900 bg-white"
+              className="border rounded-lg px-4 py-2 text-black bg-white"
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
             >
-              <option value="all" className="text-gray-900">
-                All Types
-              </option>
-              <option value="income" className="text-gray-900">
-                Income
-              </option>
-              <option value="expense" className="text-gray-900">
-                Expense
-              </option>
+              <option value="all">All Types</option>
+              <option value="income">Income</option>
+              <option value="expense">Expense</option>
             </select>
           </div>
 
           <button
-            onClick={() => setShowAddTransaction(true)}
+            onClick={() => {
+              setEditingTransaction(null);
+              setFormData({
+                type: "expense",
+                amount: "",
+                account: "Bank Account",
+                category: "Food & Groceries",
+                description: "",
+                date: new Date().toISOString().split("T")[0],
+              });
+              setShowAddTransaction(true);
+            }}
             className="bg-[#1677FF] text-white px-6 py-2 rounded-lg hover:bg-blue-600 flex items-center space-x-2"
           >
             <Plus className="w-4 h-4" />
@@ -131,80 +220,97 @@ export default function TransactionsPage() {
         {/* Transactions List */}
         <Card className="bg-white shadow-sm">
           <CardHeader className="border-b">
-            <CardTitle className="text-gray-900">All Transactions</CardTitle>
+            <CardTitle className="text-black font-bold">
+              All Transactions
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {transactions
-                .filter(
-                  (t) =>
-                    selectedAccount === "all" || t.account === selectedAccount
-                )
-                .filter(
-                  (t) => selectedType === "all" || t.type === selectedType
-                )
-                .map((transaction) => (
+              {loading ? (
+                <div>Loading...</div>
+              ) : (
+                transactions.map((transaction) => (
                   <div
                     key={transaction.id}
                     className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100"
                   >
                     <div className="flex items-center space-x-4">
-                      <Clock className="w-5 h-5 text-gray-600" />
+                      <Clock className="w-5 h-5 text-black" />
                       <div>
                         <div className="flex items-center space-x-2">
-                          <span className="font-medium text-gray-900">
+                          <span className="font-medium text-black">
                             {transaction.description}
                           </span>
-                          <span className="text-sm text-gray-700">
+                          <span className="text-sm text-black">
                             • {transaction.account}
                           </span>
                         </div>
-                        <div className="text-sm text-gray-700">
+                        <div className="text-sm text-black">
                           Category: {transaction.category}
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p
-                        className={`font-medium ${
-                          transaction.type === "income"
-                            ? "text-[#52C41A]"
-                            : "text-[#FF4D4F]"
-                        }`}
-                      >
-                        {transaction.type === "income" ? "+" : ""}
-                        {transaction.amount.toFixed(2)}€
-                      </p>
-                      <p className="text-sm text-gray-700">
-                        {transaction.date}
-                      </p>
+                    <div className="flex items-center space-x-4">
+                      <div className="text-right">
+                        <p
+                          className={`font-medium ${
+                            transaction.type === "income"
+                              ? "text-[#52C41A]"
+                              : "text-[#FF4D4F]"
+                          }`}
+                        >
+                          {transaction.type === "income" ? "+" : ""}
+                          {Math.abs(transaction.amount).toFixed(2)}€
+                        </p>
+                        <p className="text-sm text-black">{transaction.date}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEdit(transaction)}
+                          className="p-2 hover:bg-blue-100 rounded-full"
+                        >
+                          <Pencil className="w-4 h-4 text-blue-600" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(transaction.id)}
+                          className="p-2 hover:bg-red-100 rounded-full"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Add Transaction Modal */}
+        {/* Add/Edit Transaction Modal */}
         {showAddTransaction && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <Card className="w-full max-w-md bg-white">
               <CardHeader className="border-b">
-                <CardTitle className="text-gray-900">
-                  Add New Transaction
+                <CardTitle className="text-black font-bold">
+                  {editingTransaction
+                    ? "Edit Transaction"
+                    : "Add New Transaction"}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form
+                  onSubmit={editingTransaction ? handleUpdate : handleSubmit}
+                  className="space-y-4"
+                >
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-black mb-1">
                       Type
                     </label>
                     <select
                       name="type"
                       value={formData.type}
                       onChange={handleFormChange}
-                      className="w-full border rounded-lg px-4 py-2 text-gray-900"
+                      className="w-full border rounded-lg px-4 py-2 text-black"
                     >
                       <option value="income">Income</option>
                       <option value="expense">Expense</option>
@@ -212,7 +318,7 @@ export default function TransactionsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-black mb-1">
                       Amount
                     </label>
                     <input
@@ -222,20 +328,20 @@ export default function TransactionsPage() {
                       onChange={handleFormChange}
                       placeholder="0.00"
                       step="0.01"
-                      className="w-full border rounded-lg px-4 py-2 text-gray-900"
+                      className="w-full border rounded-lg px-4 py-2 text-black"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-black mb-1">
                       Account
                     </label>
                     <select
                       name="account"
                       value={formData.account}
                       onChange={handleFormChange}
-                      className="w-full border rounded-lg px-4 py-2 text-gray-900"
+                      className="w-full border rounded-lg px-4 py-2 text-black"
                     >
                       <option value="Bank Account">Bank Account</option>
                       <option value="Mobile Money">Mobile Money</option>
@@ -244,24 +350,25 @@ export default function TransactionsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-black mb-1">
                       Category
                     </label>
                     <select
                       name="category"
                       value={formData.category}
                       onChange={handleFormChange}
-                      className="w-full border rounded-lg px-4 py-2 text-gray-900"
+                      className="w-full border rounded-lg px-4 py-2 text-black"
                     >
-                      <option value="Salary">Salary</option>
-                      <option value="Food & Groceries">Food & Groceries</option>
-                      <option value="Transportation">Transportation</option>
-                      <option value="Housing">Housing</option>
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.name}>
+                          {category.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-black mb-1">
                       Description
                     </label>
                     <input
@@ -270,13 +377,13 @@ export default function TransactionsPage() {
                       value={formData.description}
                       onChange={handleFormChange}
                       placeholder="Transaction description"
-                      className="w-full border rounded-lg px-4 py-2 text-gray-900"
+                      className="w-full border rounded-lg px-4 py-2 text-black"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-black mb-1">
                       Date
                     </label>
                     <input
@@ -284,7 +391,7 @@ export default function TransactionsPage() {
                       name="date"
                       value={formData.date}
                       onChange={handleFormChange}
-                      className="w-full border rounded-lg px-4 py-2 text-gray-900"
+                      className="w-full border rounded-lg px-4 py-2 text-black"
                       required
                     />
                   </div>
@@ -292,8 +399,11 @@ export default function TransactionsPage() {
                   <div className="flex justify-end space-x-2 pt-4">
                     <button
                       type="button"
-                      onClick={() => setShowAddTransaction(false)}
-                      className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                      onClick={() => {
+                        setShowAddTransaction(false);
+                        setEditingTransaction(null);
+                      }}
+                      className="px-4 py-2 text-black hover:bg-gray-100 rounded-lg"
                     >
                       Cancel
                     </button>
@@ -301,7 +411,7 @@ export default function TransactionsPage() {
                       type="submit"
                       className="px-4 py-2 bg-[#1677FF] text-white rounded-lg hover:bg-blue-600"
                     >
-                      Add Transaction
+                      {editingTransaction ? "Update" : "Add"} Transaction
                     </button>
                   </div>
                 </form>

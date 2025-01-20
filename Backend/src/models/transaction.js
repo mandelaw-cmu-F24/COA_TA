@@ -4,7 +4,10 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class Transaction extends Model {
     static associate(models) {
-      // define associations here if needed
+      Transaction.belongsTo(models.Category, {
+        foreignKey: "categoryId",
+        as: "categoryAssociation",
+      });
     }
   }
 
@@ -34,10 +37,18 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: false,
       },
+      categoryId: {
+        type: DataTypes.INTEGER,
+        references: {
+          model: "Categories",
+          key: "id",
+        },
+      },
     },
     {
       sequelize,
       modelName: "Transaction",
+      tableName: "Transactions",
     }
   );
 

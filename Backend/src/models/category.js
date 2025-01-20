@@ -1,5 +1,5 @@
 "use strict";
-const { Model } = require("sequelize");
+const { Model, Transaction } = require("sequelize");
 
 module.exports = (sequelize, DataTypes) => {
   class Category extends Model {
@@ -8,6 +8,12 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "categoryId",
         as: "subcategories",
         onDelete: "CASCADE",
+      });
+
+      // Association with Transaction
+      Category.hasMany(models.Transaction, {
+        foreignKey: "categoryId",
+        as: "transactions",
       });
     }
   }

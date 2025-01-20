@@ -44,7 +44,8 @@ const transactionController = {
 
   async createTransaction(req, res) {
     try {
-      const { type, amount, account, category, description, date } = req.body;
+      const { type, amount, account, category, categoryId, description, date } =
+        req.body;
 
       if (!type || !amount || !account || !category || !description || !date) {
         return res.status(400).json({
@@ -52,18 +53,48 @@ const transactionController = {
         });
       }
 
-      const transaction = await transactionService.create({
+      const result = await transactionService.create({
         type,
         amount,
         account,
         category,
+        categoryId,
         description,
         date,
       });
 
+      // Handle budget alerts
+      if (result.budgetAlert) {
+        if (result.budgetAlert.isOverBudget) {
+          return res.status(201).json({
+            message:
+              "Transaction created successfully. Warning: Budget exceeded!",
+            data: result.transaction,
+            budgetAlert: {
+              message: `Budget for ${result.budgetAlert.category} exceeded! Spent: €${result.budgetAlert.spent} of €${result.budgetAlert.limit}`,
+              percentage: result.budgetAlert.percentage,
+              type: "exceeded",
+            },
+          });
+        } else if (result.budgetAlert.isNearLimit) {
+          return res.status(201).json({
+            message:
+              "Transaction created successfully. Warning: Approaching budget limit!",
+            data: result.transaction,
+            budgetAlert: {
+              message: `Approaching budget limit for ${
+                result.budgetAlert.category
+              }! ${result.budgetAlert.percentage.toFixed(1)}% used`,
+              percentage: result.budgetAlert.percentage,
+              type: "warning",
+            },
+          });
+        }
+      }
+
       res.status(201).json({
         message: "Transaction created successfully",
-        data: transaction,
+        data: result.transaction,
       });
     } catch (error) {
       console.error("Error creating transaction:", error);
@@ -77,20 +108,39 @@ const transactionController = {
   async updateTransaction(req, res) {
     try {
       const { id } = req.params;
-      const { type, amount, account, category, description, date } = req.body;
+      const { type, amount, account, category, categoryId, description, date } =
+        req.body;
 
-      const transaction = await transactionService.update(id, {
+      const result = await transactionService.update(id, {
         type,
         amount,
         account,
         category,
+        categoryId,
         description,
         date,
       });
 
+      // Handle budget alerts
+      if (result.budgetAlert) {
+        return res.json({
+          message: "Transaction updated successfully",
+          data: result.transaction,
+          budgetAlert: {
+            message: result.budgetAlert.isOverBudget
+              ? `Budget for ${result.budgetAlert.category} exceeded! Spent: €${result.budgetAlert.spent} of €${result.budgetAlert.limit}`
+              : `Approaching budget limit for ${
+                  result.budgetAlert.category
+                }! ${result.budgetAlert.percentage.toFixed(1)}% used`,
+            percentage: result.budgetAlert.percentage,
+            type: result.budgetAlert.isOverBudget ? "exceeded" : "warning",
+          },
+        });
+      }
+
       res.json({
         message: "Transaction updated successfully",
-        data: transaction,
+        data: result.transaction,
       });
     } catch (error) {
       console.error("Error updating transaction:", error);

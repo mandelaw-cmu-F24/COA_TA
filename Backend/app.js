@@ -10,6 +10,7 @@ const categoryRoutes = require("./src/routes/category");
 const subcategoryRoutes = require("./src/routes/subcategory");
 const budgetRoutes = require("./src/routes/budget");
 const transactionRoutes = require("./src/routes/transaction");
+const dashboardRoutes = require("./src/routes/dashboardRoutes");
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/subcategories", subcategoryRoutes);
 app.use("/api/budgets", budgetRoutes);
 app.use("/api/transactions", transactionRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {

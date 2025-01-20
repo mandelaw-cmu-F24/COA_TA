@@ -2,12 +2,22 @@ import axios from "axios";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:7000/api";
 
-const api = axios.create({
+export const api = axios.create({
   baseURL: API_URL,
   headers: {
     "Content-Type": "application/json",
   },
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 500) {
+      console.error("Server error:", error);
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const categoryService = {
   getAllCategories: () => api.get("/categories"),
@@ -46,5 +56,24 @@ export const transactionService = {
   createTransaction: (data) => api.post("/transactions", data),
   updateTransaction: (id, data) => api.put(`/transactions/${id}`, data),
   deleteTransaction: (id) => api.delete(`/transactions/${id}`),
+};
+
+export const dashboardService = {
+  getDashboardData: async (timeRange, dateFrom, dateTo) => {
+    try {
+      const params = new URLSearchParams();
+      if (timeRange) params.append("timeRange", timeRange);
+      if (dateFrom) params.append("dateFrom", dateFrom);
+      if (dateTo) params.append("dateTo", dateTo);
+
+      const url = `/dashboard?${params.toString()}`;
+      console.log("Requesting URL:", url);
+
+      return await api.get(url);
+    } catch (error) {
+      console.error("Dashboard request error:", error.response || error);
+      throw error;
+    }
+  },
 };
 export default api;

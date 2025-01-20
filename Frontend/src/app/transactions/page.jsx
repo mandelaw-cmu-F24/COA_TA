@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from "../components/ui/card";
 import { Plus, Clock, Pencil, Trash2 } from "lucide-react";
-import { transactionService } from "../services/api";
+import { transactionService, categoryService } from "../services/api";
 import { toast } from "react-hot-toast";
 
 export default function TransactionsPage() {
@@ -25,7 +25,7 @@ export default function TransactionsPage() {
     type: "expense",
     amount: "",
     account: "Bank Account",
-    category: "Food & Groceries",
+    category: "",
     description: "",
     date: new Date().toISOString().split("T")[0],
   });
@@ -51,6 +51,12 @@ export default function TransactionsPage() {
     try {
       const response = await categoryService.getAllCategories();
       setCategories(response.data.data);
+      if (response.data.data.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          category: response.data.data[0].name,
+        }));
+      }
     } catch (error) {
       console.error("Failed to fetch categories:", error);
     }
@@ -72,20 +78,38 @@ export default function TransactionsPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const selectedCategory = categories.find(
+        (c) => c.name === formData.category
+      );
       const response = await transactionService.createTransaction({
         ...formData,
         amount:
           formData.type === "expense"
             ? -Math.abs(parseFloat(formData.amount))
             : Math.abs(parseFloat(formData.amount)),
-        categoryId: categories.find((c) => c.name === formData.category)?.id,
+        category: selectedCategory?.name,
+        categoryId: selectedCategory?.id,
       });
 
       if (response.data.budgetAlert) {
         if (response.data.budgetAlert.type === "exceeded") {
-          toast.error(response.data.budgetAlert.message);
+          toast.error(response.data.budgetAlert.message, {
+            duration: 120000, // 2 minutes
+            style: {
+              border: "1px solid #FF4D4F",
+              padding: "16px",
+              color: "#FF4D4F",
+            },
+          });
         } else {
-          toast.warning(response.data.budgetAlert.message);
+          toast.warning(response.data.budgetAlert.message, {
+            duration: 120000, // 2 minutes
+            style: {
+              border: "1px solid #faad14",
+              padding: "16px",
+              color: "#faad14",
+            },
+          });
         }
       }
 
@@ -95,7 +119,7 @@ export default function TransactionsPage() {
         type: "expense",
         amount: "",
         account: "Bank Account",
-        category: "Food & Groceries",
+        category: categories.length > 0 ? categories[0].name : "",
         description: "",
         date: new Date().toISOString().split("T")[0],
       });
@@ -106,18 +130,12 @@ export default function TransactionsPage() {
     }
   };
 
-  const handleEdit = (transaction) => {
-    setEditingTransaction(transaction);
-    setFormData({
-      ...transaction,
-      amount: Math.abs(transaction.amount),
-    });
-    setShowAddTransaction(true);
-  };
-
   const handleUpdate = async (e) => {
     e.preventDefault();
     try {
+      const selectedCategory = categories.find(
+        (c) => c.name === formData.category
+      );
       const response = await transactionService.updateTransaction(
         editingTransaction.id,
         {
@@ -126,15 +144,30 @@ export default function TransactionsPage() {
             formData.type === "expense"
               ? -Math.abs(parseFloat(formData.amount))
               : Math.abs(parseFloat(formData.amount)),
-          categoryId: categories.find((c) => c.name === formData.category)?.id,
+          category: selectedCategory?.name,
+          categoryId: selectedCategory?.id,
         }
       );
 
       if (response.data.budgetAlert) {
         if (response.data.budgetAlert.type === "exceeded") {
-          toast.error(response.data.budgetAlert.message);
+          toast.error(response.data.budgetAlert.message, {
+            duration: 120000, // 2 minutes
+            style: {
+              border: "1px solid #FF4D4F",
+              padding: "16px",
+              color: "#FF4D4F",
+            },
+          });
         } else {
-          toast.warning(response.data.budgetAlert.message);
+          toast.warning(response.data.budgetAlert.message, {
+            duration: 120000, // 2 minutes
+            style: {
+              border: "1px solid #faad14",
+              padding: "16px",
+              color: "#faad14",
+            },
+          });
         }
       }
 
@@ -145,7 +178,7 @@ export default function TransactionsPage() {
         type: "expense",
         amount: "",
         account: "Bank Account",
-        category: "Food & Groceries",
+        category: categories.length > 0 ? categories[0].name : "",
         description: "",
         date: new Date().toISOString().split("T")[0],
       });
@@ -154,6 +187,16 @@ export default function TransactionsPage() {
       toast.error("Failed to update transaction");
       console.error(error);
     }
+  };
+
+  const handleEdit = (transaction) => {
+    setEditingTransaction(transaction);
+    setFormData({
+      ...transaction,
+      amount: Math.abs(transaction.amount),
+      category: transaction.category,
+    });
+    setShowAddTransaction(true);
   };
 
   const handleDelete = async (id) => {
@@ -204,7 +247,7 @@ export default function TransactionsPage() {
                 type: "expense",
                 amount: "",
                 account: "Bank Account",
-                category: "Food & Groceries",
+                category: categories.length > 0 ? categories[0].name : "",
                 description: "",
                 date: new Date().toISOString().split("T")[0],
               });
@@ -246,7 +289,9 @@ export default function TransactionsPage() {
                           </span>
                         </div>
                         <div className="text-sm text-black">
-                          Category: {transaction.category}
+                          Category:{" "}
+                          {transaction.categoryAssociation?.name ||
+                            transaction.category}
                         </div>
                       </div>
                     </div>
@@ -358,6 +403,7 @@ export default function TransactionsPage() {
                       value={formData.category}
                       onChange={handleFormChange}
                       className="w-full border rounded-lg px-4 py-2 text-black"
+                      required
                     >
                       {categories.map((category) => (
                         <option key={category.id} value={category.name}>

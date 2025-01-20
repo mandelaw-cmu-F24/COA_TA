@@ -8,6 +8,13 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "categoryId",
         as: "categoryAssociation",
       });
+
+      // Association with account
+      Transaction.belongsTo(models.Account, {
+        foreignKey: "accountId",
+        as: "accountAssociation",
+        targetKey: "id",
+      });
     }
   }
 
@@ -19,10 +26,6 @@ module.exports = (sequelize, DataTypes) => {
       },
       amount: {
         type: DataTypes.DECIMAL(10, 2),
-        allowNull: false,
-      },
-      account: {
-        type: DataTypes.STRING,
         allowNull: false,
       },
       category: {
@@ -41,6 +44,14 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         references: {
           model: "Categories",
+          key: "id",
+        },
+      },
+      accountId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+          model: "Accounts",
           key: "id",
         },
       },

@@ -45,10 +45,6 @@ module.exports = {
         type: Sequelize.DATE,
       },
     });
-
-    // Add indexes for better query performance
-    await queryInterface.addIndex("SubcategoryBudgets", ["budgetId"]);
-    await queryInterface.addIndex("SubcategoryBudgets", ["subcategoryId"]);
   },
 
   async down(queryInterface, Sequelize) {

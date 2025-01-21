@@ -2,36 +2,32 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("Budgets", {
+    await queryInterface.createTable("Subcategories", {
       id: {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
         type: Sequelize.INTEGER,
       },
+      name: {
+        type: Sequelize.STRING,
+        allowNull: false,
+      },
+      budget: {
+        type: Sequelize.DECIMAL(10, 2),
+        allowNull: false,
+        validate: {
+          min: 0,
+        },
+      },
       categoryId: {
         type: Sequelize.INTEGER,
+        allowNull: false,
         references: {
           model: "Categories",
           key: "id",
         },
         onDelete: "CASCADE",
-      },
-      limit: {
-        type: Sequelize.DECIMAL(10, 2),
-        allowNull: false,
-      },
-      spent: {
-        type: Sequelize.DECIMAL(10, 2),
-        defaultValue: 0,
-      },
-      currency: {
-        type: Sequelize.STRING,
-        defaultValue: "€",
-      },
-      alertThreshold: {
-        type: Sequelize.INTEGER,
-        defaultValue: 80,
       },
       createdAt: {
         allowNull: false,
@@ -45,6 +41,6 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable("Budgets");
+    await queryInterface.dropTable("Subcategories");
   },
 };

@@ -1,5 +1,6 @@
+// XXXXX-create-categories.js
 "use strict";
-/** @type {import('sequelize-cli').Migration} */
+
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable("Categories", {
@@ -11,12 +12,15 @@ module.exports = {
       },
       name: {
         type: Sequelize.STRING,
+        allowNull: false,
       },
       icon: {
         type: Sequelize.STRING,
+        allowNull: false,
       },
       color: {
         type: Sequelize.STRING,
+        allowNull: false,
       },
       createdAt: {
         allowNull: false,
@@ -28,6 +32,7 @@ module.exports = {
       },
     });
   },
+
   async down(queryInterface, Sequelize) {
     await queryInterface.dropTable("Categories");
   },

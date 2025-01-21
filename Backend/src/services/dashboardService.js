@@ -33,40 +33,48 @@ const dashboardService = {
 
       // Create default accounts if they don't exist
       const defaultAccounts = [
-        { name: "Main Bank Account", type: "Bank Account", balance: 0 },
-        { name: "Cash Wallet", type: "Cash", balance: 0 },
-        { name: "Mobile Money Account", type: "Mobile Money", balance: 0 },
+        { name: "Bank Account", type: "Bank Account", balance: 0 },
+        { name: "Cash", type: "Cash", balance: 0 },
+        { name: "Mobile Money", type: "Mobile Money", balance: 0 },
       ];
 
       // Check if accounts exist, if not create them
       for (const defaultAccount of defaultAccounts) {
-        const [account] = await Account.findOrCreate({
-          where: { type: defaultAccount.type },
+        await Account.findOrCreate({
+          where: { name: defaultAccount.name },
           defaults: defaultAccount,
         });
       }
 
-      // Now fetch accounts with transactions
+      // Set up date filters
       let dateFilter = {};
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
       switch (timeRange) {
         case "today":
           dateFilter = {
             date: {
-              [Op.gte]: sequelize.fn("CURRENT_DATE"),
+              [Op.gte]: today,
+              [Op.lt]: new Date(today.getTime() + 24 * 60 * 60 * 1000),
             },
           };
           break;
         case "this-week":
+          const weekStart = new Date(today);
+          weekStart.setDate(today.getDate() - today.getDay());
           dateFilter = {
             date: {
-              [Op.gte]: sequelize.literal("CURRENT_DATE - INTERVAL '7 days'"),
+              [Op.gte]: weekStart,
+              [Op.lt]: new Date(today.getTime() + 24 * 60 * 60 * 1000),
             },
           };
           break;
         case "this-month":
           dateFilter = {
             date: {
-              [Op.gte]: sequelize.literal("DATE_TRUNC('month', CURRENT_DATE)"),
+              [Op.gte]: new Date(today.getFullYear(), today.getMonth(), 1),
+              [Op.lt]: new Date(today.getTime() + 24 * 60 * 60 * 1000),
             },
           };
           break;
@@ -74,122 +82,85 @@ const dashboardService = {
           if (dateFrom && dateTo) {
             dateFilter = {
               date: {
-                [Op.between]: [dateFrom, dateTo],
+                [Op.between]: [new Date(dateFrom), new Date(dateTo)],
               },
             };
           }
           break;
       }
 
+      // Fetch accounts with their transactions
       const accounts = await Account.findAll({
+        attributes: ["id", "name", "type", "balance"],
         include: [
           {
             model: Transaction,
             as: "transactions",
-            attributes: [],
             where: dateFilter,
             required: false,
+            attributes: ["amount", "type", "date"],
           },
         ],
-        attributes: [
-          "id",
-          "name",
-          "type",
-          "balance",
-          [
-            sequelize.fn(
-              "COALESCE",
-              sequelize.fn(
-                "SUM",
-                sequelize.literal(
-                  "CASE WHEN transactions.date >= CURRENT_DATE THEN transactions.amount ELSE 0 END"
-                )
-              ),
-              0
-            ),
-            "todayTransactions",
-          ],
-          [
-            sequelize.fn(
-              "COALESCE",
-              sequelize.fn(
-                "SUM",
-                sequelize.literal(
-                  "CASE WHEN transactions.type = 'income' AND transactions.date >= CURRENT_DATE THEN transactions.amount ELSE 0 END"
-                )
-              ),
-              0
-            ),
-            "todayIncome",
-          ],
-          [
-            sequelize.fn(
-              "COALESCE",
-              sequelize.fn("SUM", sequelize.col("transactions.amount")),
-              0
-            ),
-            "periodTransactions",
-          ],
-        ],
-        group: [
-          "Account.id",
-          "Account.name",
-          "Account.type",
-          "Account.balance",
-        ],
-        raw: true,
+        raw: false,
+        nest: true,
       });
 
-      // Update dashboardData with actual account data if exists
-      if (accounts && accounts.length > 0) {
-        accounts.forEach((account) => {
-          switch (account.type) {
-            case "Bank Account":
-              dashboardData.accounts.bank = {
-                balance: parseFloat(account.balance) || 0,
-                todayTransactions: parseFloat(account.todayTransactions) || 0,
-                monthlyTransactions:
-                  parseFloat(account.periodTransactions) || 0,
-              };
-              break;
-            case "Mobile Money":
-              dashboardData.accounts.mobileMoney = {
-                balance: parseFloat(account.balance) || 0,
-                todayTransactions: parseFloat(account.todayTransactions) || 0,
-                monthlyTransactions:
-                  parseFloat(account.periodTransactions) || 0,
-              };
-              break;
-            case "Cash":
-              dashboardData.accounts.cash = {
-                balance: parseFloat(account.balance) || 0,
-                todayTransactions: parseFloat(account.todayTransactions) || 0,
-                monthlyTransactions:
-                  parseFloat(account.periodTransactions) || 0,
-              };
-              break;
-          }
+      // Process accounts data
+      for (const account of accounts) {
+        const accountData = {
+          balance: parseFloat(account.balance) || 0,
+          todayTransactions: 0,
+          monthlyTransactions: 0,
+        };
 
-          if (account.todayIncome > 0) {
-            dashboardData.accounts.income.todayIncome +=
-              parseFloat(account.todayIncome) || 0;
+        // Calculate transactions totals
+        if (account.transactions) {
+          for (const transaction of account.transactions) {
+            const amount = parseFloat(transaction.amount);
+
+            // Update monthly/period transactions
+            accountData.monthlyTransactions += amount;
+
+            // Update today's transactions
+            if (
+              new Date(transaction.date).toDateString() === today.toDateString()
+            ) {
+              accountData.todayTransactions += amount;
+              if (transaction.type === "income") {
+                dashboardData.accounts.income.todayIncome += amount;
+              }
+            }
           }
-        });
+        }
+
+        // Update the corresponding account type in dashboardData
+        switch (account.type) {
+          case "Bank Account":
+            dashboardData.accounts.bank = accountData;
+            break;
+          case "Mobile Money":
+            dashboardData.accounts.mobileMoney = accountData;
+            break;
+          case "Cash":
+            dashboardData.accounts.cash = accountData;
+            break;
+        }
       }
 
-      // Budget alerts part remains the same
+      // Fetch budget alerts
       const budgets = await sequelize.query(
         `SELECT 
-            c.name as category,
-            b.limit,
-            b.spent,
-            b.alertThreshold
-          FROM Budgets b
-          JOIN Categories c ON b.categoryId = c.id
-          WHERE b.spent >= b.limit * (b.alertThreshold / 100)`,
+          c.name as category,
+          b.limit,
+          b.spent,
+          b.alertThreshold
+        FROM "Budgets" b
+        JOIN "Categories" c ON b."categoryId" = c.id
+        WHERE b.spent >= b.limit * (b."alertThreshold" / 100)`,
         { type: sequelize.QueryTypes.SELECT }
       );
 
+      // Process budget alerts
       budgets.forEach((budget) => {
         const percentageUsed = (budget.spent / budget.limit) * 100;
         const message = `Budget for ${
@@ -207,4 +178,5 @@ const dashboardService = {
     }
   },
 };
+
 module.exports = dashboardService;

@@ -46,8 +46,18 @@ const transactionService = {
   async create(data) {
     try {
       const result = await sequelize.transaction(async (t) => {
-        // Create the transaction
-        const transaction = await Transaction.create(data, { transaction: t });
+        const transaction = await Transaction.create(
+          {
+            type: data.type,
+            amount: data.amount,
+            account: data.account,
+            category: data.category,
+            categoryId: data.categoryId,
+            description: data.description,
+            date: data.date,
+          },
+          { transaction: t }
+        );
 
         // Update budget if it's an expense
         if (data.type === "expense" && data.categoryId) {

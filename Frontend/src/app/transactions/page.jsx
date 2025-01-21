@@ -50,21 +50,31 @@ export default function TransactionsPage() {
   const fetchCategories = async () => {
     try {
       const response = await categoryService.getAllCategories();
+      console.log("Fetched categories response:", response);
       setCategories(response.data.data);
+
       if (response.data.data.length > 0) {
+        const firstCategory = response.data.data[0];
+        console.log("Setting initial category:", firstCategory);
         setFormData((prev) => ({
           ...prev,
-          category: response.data.data[0].name,
+          category: firstCategory.name,
         }));
+      } else {
+        console.log("No categories available");
       }
     } catch (error) {
-      console.error("Failed to fetch categories:", error);
+      console.error("Categories fetch error:", error.response?.data || error);
+      toast.error("Failed to load categories");
     }
   };
 
   useEffect(() => {
-    fetchCategories();
-    fetchTransactions();
+    const init = async () => {
+      await fetchCategories();
+      await fetchTransactions();
+    };
+    init();
   }, [selectedAccount, selectedType]);
 
   const handleFormChange = (e) => {
@@ -81,34 +91,49 @@ export default function TransactionsPage() {
       const selectedCategory = categories.find(
         (c) => c.name === formData.category
       );
-      const response = await transactionService.createTransaction({
-        ...formData,
+      console.log("Selected Category:", selectedCategory);
+
+      // Create the transaction data object
+      const transactionData = {
+        type: formData.type,
         amount:
           formData.type === "expense"
             ? -Math.abs(parseFloat(formData.amount))
             : Math.abs(parseFloat(formData.amount)),
-        category: selectedCategory?.name,
+        account: formData.account,
+        category: formData.category,
         categoryId: selectedCategory?.id,
-      });
+        description: formData.description,
+        date: formData.date,
+      };
+
+      // Log the data being sent
+      console.log("Sending transaction data:", transactionData);
+
+      const response = await transactionService.createTransaction(
+        transactionData
+      );
 
       if (response.data.budgetAlert) {
         if (response.data.budgetAlert.type === "exceeded") {
-          toast.error(response.data.budgetAlert.message, {
-            duration: 120000, // 2 minutes
+          toast(response.data.budgetAlert.message, {
+            duration: 120000,
             style: {
               border: "1px solid #FF4D4F",
               padding: "16px",
               color: "#FF4D4F",
             },
+            icon: "⚠️",
           });
         } else {
-          toast.warning(response.data.budgetAlert.message, {
-            duration: 120000, // 2 minutes
+          toast(response.data.budgetAlert.message, {
+            duration: 120000,
             style: {
               border: "1px solid #faad14",
               padding: "16px",
               color: "#faad14",
             },
+            icon: "⚠️",
           });
         }
       }
@@ -125,8 +150,11 @@ export default function TransactionsPage() {
       });
       fetchTransactions();
     } catch (error) {
+      console.error(
+        "Transaction creation error:",
+        error.response?.data || error
+      );
       toast.error("Failed to create transaction");
-      console.error(error);
     }
   };
 
@@ -136,23 +164,32 @@ export default function TransactionsPage() {
       const selectedCategory = categories.find(
         (c) => c.name === formData.category
       );
+      console.log("Selected Category for update:", selectedCategory);
+
+      const transactionData = {
+        type: formData.type,
+        amount:
+          formData.type === "expense"
+            ? -Math.abs(parseFloat(formData.amount))
+            : Math.abs(parseFloat(formData.amount)),
+        account: formData.account,
+        category: formData.category,
+        categoryId: selectedCategory?.id,
+        description: formData.description,
+        date: formData.date,
+      };
+
+      console.log("Sending update data:", transactionData);
+
       const response = await transactionService.updateTransaction(
         editingTransaction.id,
-        {
-          ...formData,
-          amount:
-            formData.type === "expense"
-              ? -Math.abs(parseFloat(formData.amount))
-              : Math.abs(parseFloat(formData.amount)),
-          category: selectedCategory?.name,
-          categoryId: selectedCategory?.id,
-        }
+        transactionData
       );
 
       if (response.data.budgetAlert) {
         if (response.data.budgetAlert.type === "exceeded") {
           toast.error(response.data.budgetAlert.message, {
-            duration: 120000, // 2 minutes
+            duration: 120000,
             style: {
               border: "1px solid #FF4D4F",
               padding: "16px",
@@ -161,7 +198,7 @@ export default function TransactionsPage() {
           });
         } else {
           toast.warning(response.data.budgetAlert.message, {
-            duration: 120000, // 2 minutes
+            duration: 120000,
             style: {
               border: "1px solid #faad14",
               padding: "16px",
@@ -405,6 +442,7 @@ export default function TransactionsPage() {
                       className="w-full border rounded-lg px-4 py-2 text-black"
                       required
                     >
+                      <option value="">Select a category</option>
                       {categories.map((category) => (
                         <option key={category.id} value={category.name}>
                           {category.name}

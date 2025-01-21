@@ -1,3 +1,4 @@
+// XXXXX-create-transactions.js
 "use strict";
 
 module.exports = {
@@ -21,14 +22,6 @@ module.exports = {
         type: Sequelize.STRING,
         allowNull: false,
       },
-      accountId: {
-        type: Sequelize.INTEGER,
-        allowNull: true,
-        references: {
-          model: "Accounts",
-          key: "id",
-        },
-      },
       category: {
         type: Sequelize.STRING,
         allowNull: false,
@@ -39,7 +32,6 @@ module.exports = {
           model: "Categories",
           key: "id",
         },
-        onDelete: "SET NULL",
       },
       description: {
         type: Sequelize.STRING,
